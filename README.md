@@ -91,3 +91,249 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+
+
+
+---------------------ISH_KODI_OLMES_WRAPPER--------------------------------------------------------------------
+
+ import subprocess
+
+import json
+
+import os
+
+import shutil
+
+import glob
+
+
+
+class OlmesWrapper:
+
+def __init__(self, base_model_name, task_name, limit=None):
+
+"""
+
+base_model_name: e.g., "Qwen/Qwen2.5-0.5B"
+
+task_name: e.g., "minerva_math_algebra:bpb::olmes"
+
+limit: (Optional) If set to integer (e.g. 50), only tests 50 questions.
+
+CRITICAL for speed during the evolutionary loop!
+
+"""
+
+self.base_model_name = base_model_name
+
+self.task_name = task_name
+
+self.limit = limit
+
+
+# We will save temporary adapters here
+
+self.temp_dir = os.path.join("results", "temp_es_adapters")
+
+os.makedirs(self.temp_dir, exist_ok=True)
+
+
+def get_score(self, peft_model, generation_index, candidate_index):
+
+"""
+
+1. Saves the current candidate model (adapter).
+
+2. Runs OLMES via subprocess.
+
+3. Returns the score.
+
+"""
+
+# --- Step A: Define paths for this specific candidate ---
+
+# We use unique paths so parallel runs don't overwrite each other
+
+run_id = f"gen_{generation_index}_cand_{candidate_index}"
+
+adapter_save_path = os.path.join(self.temp_dir, run_id)
+
+output_path = os.path.join(self.temp_dir, f"{run_id}_output")
+
+
+# Clean up previous run if exists
+
+if os.path.exists(output_path):
+
+shutil.rmtree(output_path)
+
+
+# --- Step B: Save the Adapter (The "Soft Prompt") ---
+
+# This writes the `adapter_model.bin` and `adapter_config.json` to disk
+
+peft_model.save_pretrained(adapter_save_path)
+
+
+# --- Step C: Build the OLMES Command ---
+
+# Based on OLMES Readme: we pass the adapter via --model-args "peft=..."
+
+# This is standard for tools built on lm-evaluation-harness
+
+model_args = f"peft={adapter_save_path},trust_remote_code=True"
+
+
+cmd = [
+
+"olmes",
+
+"--model",
+
+self.base_model_name,
+
+"--model-args",
+
+model_args,
+
+"--task",
+
+self.task_name,
+
+"--output-dir",
+
+output_path,
+
+]
+
+
+# Add limit for speed (if configured)
+
+if self.limit:
+
+cmd.extend(["--limit", str(self.limit)])
+
+
+# --- Step D: Execute Command ---
+
+# capture_output=True keeps your terminal clean.
+
+# set text=True to process output as string
+
+try:
+
+result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+except subprocess.CalledProcessError as e:
+
+print(f"OLMES Crashed for {run_id}!")
+
+print("Error Log:", e.stderr)
+
+return -999.0 # Return bad score on failure
+
+
+# --- Step E: Parse Results ---
+
+# OLMES saves results in the output_dir. We need to find the .json file.
+
+score = self._parse_json_results(output_path)
+
+
+# Cleanup to save disk space (Optional - disable if debugging)
+
+shutil.rmtree(adapter_save_path)
+
+shutil.rmtree(output_path)
+
+
+return score
+
+
+def _parse_json_results(self, output_dir):
+
+"""
+
+Finds the JSON file in the output directory and extracts the metric.
+
+"""
+
+try:
+
+# Recursive search for any .json file in the output dir
+
+json_files = glob.glob(f"{output_dir}/**/*.json", recursive=True)
+
+
+if not json_files:
+
+print(f"No JSON found in {output_dir}")
+
+return -999.0
+
+
+# Usually the results file is the largest JSON or the most recent
+
+target_file = json_files[0]
+
+
+with open(target_file, "r") as f:
+
+data = json.load(f)
+
+
+# --- EXTRACT METRIC ---
+
+# The structure is usually: results -> task_name -> metric
+
+# We need to handle potential slight naming variations in the JSON key
+
+
+# 1. Find the key that matches our task
+
+result_keys = list(data.get("results", {}).keys())
+
+if not result_keys:
+
+return -999.0
+
+
+# Just take the first task found (since we only run 1 task at a time)
+
+task_key = result_keys[0]
+
+metrics = data["results"][task_key]
+
+
+# 2. Select the metric based on task type
+
+# For BPB (Bits Per Byte) - LOWER is better, so we return negative
+
+if "bpb" in metrics:
+
+return -metrics["bpb"]
+
+
+# For Accuracy (ARC, MMLU) - HIGHER is better
+
+if "acc_norm" in metrics:
+
+return metrics["acc_norm"]
+
+if "acc" in metrics:
+
+return metrics["acc"]
+
+
+# Fallback
+
+print(f"Unknown metrics found: {metrics.keys()}")
+
+return 0.0
+
+
+except Exception as e:
+
+print(f"Parsing Error: {e}")
+
+return -999.0 

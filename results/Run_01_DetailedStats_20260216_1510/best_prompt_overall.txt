@@ -1,0 +1,2 @@
+Soft Prompt Tensor Saved.
+To visualize, we need a nearest-neighbor search (advanced feature).

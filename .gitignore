@@ -1,0 +1,18 @@
+# Python virtual environments
+.venv/
+venv/
+__pycache__/
+
+# AI Models and Checkpoints (Too big for GitHub)
+*.pt
+*.bin
+*.safetensors
+models/
+.cache/
+
+# Temporary OLMES folders
+results/temp_adapters/
+results/**/*_out/
+
+#OLMES Repo
+olmes/
