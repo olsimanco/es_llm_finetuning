@@ -48,7 +48,7 @@ def decode_soft_prompt(model_name, prompt_path):
 
 if __name__ == "__main__":
 
-    PROMPT_FILE = "results/es_res_bpb/prompt_gen_49.pt"
+    PROMPT_FILE = "results/es_res_bpb/prompt_gen_1.pt"
 
     try:
         decode_soft_prompt("Qwen/Qwen2.5-0.5B", PROMPT_FILE)
