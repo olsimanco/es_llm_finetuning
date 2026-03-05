@@ -34,14 +34,16 @@ def decode_soft_prompt(model_name, prompt_path):
         top_k_indices = torch.topk(similarities, 3).indices
 
         # Translate the indices back to human text using the tokenizer
-        # We use repr() to clearly show spaces or special characters like '\n'
         words = [repr(tokenizer.decode([idx])) for idx in top_k_indices]
 
+        # Get the actual distance/similarity scores
+        scores = [similarities[idx].item() for idx in top_k_indices]
+
         print(f"Token {i+1}:")
-        print(f"  1st closest: {words[0]}")
-        print(f"  2nd closest: {words[1]}")
-        print(f"  3rd closest: {words[2]}")
-        print("-" * 20)
+        print(f"  1st closest: {words[0]:<15} | Similarity: {scores[0]:.4f}")
+        print(f"  2nd closest: {words[1]:<15} | Similarity: {scores[1]:.4f}")
+        print(f"  3rd closest: {words[2]:<15} | Similarity: {scores[2]:.4f}")
+        print("-" * 40)
 
 
 if __name__ == "__main__":
