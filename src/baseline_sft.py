@@ -54,7 +54,7 @@ def train_baseline():
         use_cpu=True,
         packing=False,
         dataset_text_field="text",  # Look at the column we created above
-        # max_length=512,  # Problem unexpected keyword argument
+        # max_seq_length=512,  # Problem unexpected keyword argument
     )
 
     # 6. Trainer
